@@ -2509,6 +2509,37 @@ PY
 
 git_ssh_key_setup() (
   command -v git >/dev/null 2>&1 || { warn 'Git 尚未安装，跳过 SSH 密钥生成。'; return 1; }
+  git_name=$(git config --global --get user.name) || git_name=''
+  case "$git_name" in
+    *[![:space:]]*) say 'Git 全局用户名已配置，跳过。'; record_step_event skip ;;
+    *)
+      while :; do
+        printf '请输入 Git 用户名（必填）：'
+        IFS= read -r git_name || { warn '无法读取用户名，停止 Git 配置。'; return 1; }
+        case "$git_name" in
+          *[![:space:]]*) break ;;
+          *) warn '用户名不能为空，请重新输入。' ;;
+        esac
+      done
+      git config --global user.name "$git_name" || return 1
+      record_step_event change ;;
+  esac
+  ssh_email=$(git config --global --get user.email) || ssh_email=''
+  case "$ssh_email" in
+    *[![:space:]]*) say 'Git 全局邮箱已配置，跳过。'; record_step_event skip ;;
+    *)
+      printf '%s\n' '邮箱请使用 GitHub 已绑定的邮箱或 GitHub 提供的 noreply 邮箱。'
+      while :; do
+        printf '请输入 Git 邮箱（必填，同时用于 SSH 密钥）：'
+        IFS= read -r ssh_email || { warn '无法读取邮箱，停止 Git 配置。'; return 1; }
+        case "$ssh_email" in
+          *[![:space:]]*) break ;;
+          *) warn '邮箱不能为空，请重新输入。' ;;
+        esac
+      done
+      git config --global user.email "$ssh_email" || return 1
+      record_step_event change ;;
+  esac
   for key in "$HOME"/.ssh/id_*; do
     if [ -f "$key" ]; then
       say "检测到已有 SSH 密钥文件：$key；跳过生成，保留原文件。"
@@ -2517,14 +2548,6 @@ git_ssh_key_setup() (
     fi
   done
   command -v ssh-keygen >/dev/null 2>&1 || { warn '缺少 ssh-keygen，请安装 openssh-client 后重试。'; return 1; }
-  while :; do
-    printf '请输入 SSH 密钥邮箱（必填）：'
-    IFS= read -r ssh_email || { warn '无法读取邮箱，停止 SSH 密钥生成。'; return 1; }
-    case "$ssh_email" in
-      *[![:space:]]*) break ;;
-      *) warn '邮箱不能为空，请重新输入。' ;;
-    esac
-  done
   printf '%s\n' '即将在当前终端生成 SSH 公钥和私钥，请自行输入保存位置和密码（可按回车使用默认值）：'
   printf 'ssh-keygen -t ed25519 -C "%s"\n' "$ssh_email"
   ssh-keygen -t ed25519 -C "$ssh_email" || return 1
@@ -2591,7 +2614,7 @@ main() {
   run_step '.zshrc 配置' zsh_configure || die '.zshrc 准备失败。'
   run_step '终端环境清理和加载' cleanup_legacy_proxy_env || die '旧代理配置清理或 .zshrc 加载失败。'
   optional '终端和截图工具' terminal_tools_setup
-  optional 'Git SSH 密钥' git_ssh_key_setup
+  optional 'Git 配置与 SSH 密钥' git_ssh_key_setup
   optional 'Vim 配置' vim_setup
   optional 'Oh My Zsh' zsh_setup
   optional 'Caps/Esc 互换（keyd）' keyboard_setup

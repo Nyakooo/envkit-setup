@@ -36,20 +36,24 @@ git_ssh_key_setup
 rm "$HOME/.ssh/id_ed25519" "$HOME/.ssh/id_ed25519.pub"
 touch "$HOME/.ssh/id_rsa"
 git_ssh_key_setup
-''', '\n   \nuser@example.com\ninteractive\n')
+''', '\n   \nTest User\n\n   \nuser@example.com\ninteractive\nTest User\nuser@example.com\nTest User\nuser@example.com\n')
 
     def test_git_ssh_key_custom_email(self):
         output = self.run_shell('''
 HOME="$TMP/home"; mkdir -p "$HOME/.ssh" "$TMP/bin"
 PATH="$TMP/bin:$PATH"; export HOME PATH
-git() { :; }
+export GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
 cat > "$TMP/bin/ssh-keygen" <<'KEYGEN'
 #!/bin/sh
+[ "$(git config --global user.name)" = 'Test User' ] || exit 1
+[ "$(git config --global user.email)" = custom@example.com ] || exit 1
 [ "$#" = 4 ] && [ "$4" = 'custom@example.com' ]
 KEYGEN
 chmod +x "$TMP/bin/ssh-keygen"
 git_ssh_key_setup
-''', 'custom@example.com\n')
+[ "$(git config --global user.name)" = 'Test User' ]
+[ "$(git config --global user.email)" = custom@example.com ]
+''', 'Test User\ncustom@example.com\n')
         self.assertIn('-C "custom@example.com"', output)
 
     def test_git_ssh_key_eof_does_not_generate_key(self):
@@ -62,9 +66,43 @@ PATH="$TMP/bin:$PATH"; export PATH
 printf '#!/bin/sh\\necho unexpected-keygen\\nexit 99\\n' > "$TMP/bin/ssh-keygen"
 chmod +x "$TMP/bin/ssh-keygen"
 if git_ssh_key_setup; then exit 10; else [ "$?" = 1 ]; fi
-""")
+""", 'Test User\n')
         self.assertIn('无法读取邮箱', output)
         self.assertNotIn('unexpected-keygen', output)
+
+    def test_git_config_failure_stops_key_generation(self):
+        for failed_key in ('user.name', 'user.email'):
+            with self.subTest(failed_key=failed_key):
+                output = self.run_shell('''
+HOME="$TMP/home"; mkdir -p "$HOME/.ssh" "$TMP/bin"
+PATH="$TMP/bin:$PATH"; export HOME PATH
+FAILED_KEY="''' + failed_key + '''"
+git() { [ "$3" != "$FAILED_KEY" ]; }
+printf '#!/bin/sh\\necho unexpected-keygen\\nexit 99\\n' > "$TMP/bin/ssh-keygen"
+chmod +x "$TMP/bin/ssh-keygen"
+if git_ssh_key_setup; then exit 10; else [ "$?" = 1 ]; fi
+''', 'Test User\nuser@example.com\n')
+                self.assertNotIn('unexpected-keygen', output)
+
+    def test_git_identity_only_prompts_for_missing_fields(self):
+        for existing in ('both', 'name', 'email'):
+            with self.subTest(existing=existing):
+                answer = {'both': '', 'name': 'existing@example.com\n',
+                          'email': 'Existing User\n'}[existing]
+                output = self.run_shell('''
+HOME="$TMP/home"; mkdir -p "$HOME/.ssh"
+export HOME GIT_CONFIG_GLOBAL="$TMP/gitconfig" GIT_CONFIG_NOSYSTEM=1
+''' + ("git config --global user.name 'Existing User'\n" if existing != 'email' else '')
+                    + ("git config --global user.email existing@example.com\n" if existing != 'name' else '') + '''
+cp "$GIT_CONFIG_GLOBAL" "$TMP/before"
+printf original > "$HOME/.ssh/id_ed25519"
+git_ssh_key_setup
+[ "$(git config --global user.name)" = 'Existing User' ]
+[ "$(git config --global user.email)" = existing@example.com ]
+[ "$(cat "$HOME/.ssh/id_ed25519")" = original ]
+''' + ('cmp "$GIT_CONFIG_GLOBAL" "$TMP/before"\n' if existing == 'both' else ''), answer)
+                self.assertEqual('请输入 Git 用户名' in output, existing == 'email')
+                self.assertEqual('请输入 Git 邮箱' in output, existing == 'name')
 
     def test_terminal_tools_and_ssh_keys_are_independent_steps(self):
         self.run_shell('''

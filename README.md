@@ -55,12 +55,15 @@ FlClash 默认选中，使用规则模式并关闭 TUN；Termihomo 按界面提�
 | 终端工具 | `zsh`、`vim`、`htop`、`fzf`、`ranger`、`net-tools`、`tmux` | 自动检查安装 |
 | Zsh 配置 | Oh My Zsh、funky 主题、git 插件、zsh-autosuggestions、zsh-syntax-highlighting | 自动配置，设为默认 Shell |
 | Vim 配置 | 语法高亮、行号、搜索、移动与保存快捷键 | 自动配置 |
-| SSH 密钥 | Ed25519 密钥 | 已有 `~/.ssh/id_*` 文件则跳过；生成时邮箱必填，路径和密码交互输入 |
+| Git 身份 | 全局 `user.name`、`user.email` | 已配置则直接跳过，仅缺失项必填；邮箱只输入一次，使用 GitHub 已绑定邮箱或 noreply 邮箱 |
+| SSH 密钥 | Ed25519 密钥，复用上述邮箱 | Git 配置完成后生成；已有 `~/.ssh/id_*` 文件则保留并跳过，路径和密码交互输入 |
 | Node.js | nvm、最新 LTS Node.js、npm | 自动检查安装 |
 | npm 工具 | `pnpm`、`http-server`、`nrm` | 全局安装，逐项检查版本 |
 | Rust | `cargo`、`rustc`、`build-essential` | 从 Ubuntu 软件源安装 |
 | Docker | Docker CE、CLI、containerd、Compose、Buildx | 自动安装并启用服务；替换冲突包前询问 |
 | Docker 镜像加速 | 毫秒镜像、DaoCloud、DockerProxy、1Panel、轩辕节点 | 匿名测速，选取通过校验的最快至多三个入口 |
+
+Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失时先补齐身份，再检查 SSH 密钥；邮箱只输入一次。生成密钥后，需自行将公钥添加到 GitHub，私钥保留在本机。
 
 ### 桌面应用
 

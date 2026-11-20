@@ -60,13 +60,13 @@ git() { :; }
 apt() { record_step_event skip; }
 results_init
 optional '终端和截图工具' terminal_tools_setup
-optional 'Git SSH 密钥' git_ssh_key_setup
+optional 'Git 配置与 SSH 密钥' git_ssh_key_setup
 print_summary
-''')
+''', 'Test User\nuser@example.com\n')
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-        self.assertIn('[跳过] Git SSH 密钥', result.stdout)
+        self.assertIn('[成功] Git 配置与 SSH 密钥', result.stdout)
         self.assertIn('.ssh/id_ed25519', result.stdout)
-        self.assertIn('跳过：2 项', result.stdout)
+        self.assertIn('成功：1 项  失败：0 项  跳过：1 项', result.stdout)
 
     def test_failure_reason_survives_subshell_and_reaches_summary(self):
         result = self.shell("""
