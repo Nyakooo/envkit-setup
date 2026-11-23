@@ -1271,6 +1271,95 @@ PYCHATGPT
   printf 'ChatGPT 桌面客户端已安装，可从应用菜单打开并登录。\n'
 )
 
+antigravity_ide() (
+  say '检查 Antigravity IDE 官方独立版版本'
+  download https://antigravity.google/download/ "$TMP/antigravity-download.html" || return 1
+  python3 - "$TMP/antigravity-download.html" "$ARCH" > "$TMP/antigravity-asset" <<'PYANTIGRAVITY'
+# ubuntu-init Antigravity selection: standalone IDE, not the App or CLI.
+from html.parser import HTMLParser
+from pathlib import Path
+import re, sys
+from urllib.parse import unquote, urlsplit
+arch = {'amd64': 'x64', 'arm64': 'arm'}[sys.argv[2]]
+class Downloads(HTMLParser):
+    def handle_starttag(self, tag, attrs):
+        if tag != 'a':
+            return
+        url = dict(attrs).get('href', '')
+        parts = urlsplit(url)
+        match = re.fullmatch(
+            r'/edgedl/release2/[a-zA-Z0-9_-]+/antigravity/stable/'
+            r'(\d+\.\d+\.\d+)-[0-9]+/linux-' + arch + r'/Antigravity IDE\.tar\.gz',
+            unquote(parts.path))
+        if parts.scheme == 'https' and parts.netloc == 'edgedl.me.gvt1.com' and match and not parts.query and not parts.fragment:
+            found.add((match[1], url))
+found = set()
+Downloads().feed(Path(sys.argv[1]).read_text())
+if len(found) != 1:
+    raise SystemExit('无法确定当前架构的 Antigravity IDE 官方下载地址')
+version, url = found.pop()
+print(version)
+print(url)
+PYANTIGRAVITY
+  [ "$?" -eq 0 ] || return 1
+  available=$(sed -n '1p' "$TMP/antigravity-asset")
+  url=$(sed -n '2p' "$TMP/antigravity-asset")
+  current=$(python3 - "$HOME/.local/bin/antigravity-ide" <<'PYCURRENT'
+import json, sys
+from pathlib import Path
+binary = Path(sys.argv[1])
+if binary.is_file():
+    metadata = binary.resolve().parent.parent / 'resources/app/product.json'
+    print(json.loads(metadata.read_text())['ideVersion'])
+PYCURRENT
+  ) || return 1
+  if version_action 'Antigravity IDE' "$current" "$available"; then :; else
+    rc=$?; [ "$rc" -eq 1 ] && return 0; return 1
+  fi
+  say '下载 Antigravity IDE（单次最多 600 秒）'
+  curl --fail --show-error --location --connect-timeout 8 --max-time 600 --retry 2 \
+    "$url" --output "$TMP/antigravity-ide.tar.gz" || return 1
+  python3 - "$TMP/antigravity-ide.tar.gz" "$TMP/antigravity-unpacked" "$available" <<'PYUNPACK'
+import json, sys, tarfile
+from pathlib import Path
+root = Path(sys.argv[2])
+with tarfile.open(sys.argv[1]) as archive:
+    archive.extractall(root, filter='data')
+app = root / 'Antigravity IDE'
+if json.loads((app / 'resources/app/product.json').read_text())['ideVersion'] != sys.argv[3]:
+    raise SystemExit('Antigravity IDE 归档版本不匹配')
+for name in ('antigravity-ide', 'bin/antigravity-ide', 'resources/app/resources/linux/code.png'):
+    if not (app / name).is_file():
+        raise SystemExit('Antigravity IDE 归档缺少必要文件')
+PYUNPACK
+  [ "$?" -eq 0 ] || return 1
+  destination="$HOME/.local/opt/antigravity-ide-$available"
+  [ ! -e "$destination" ] || { warn "目标目录已存在，保留现有文件：$destination"; return 1; }
+  mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications" || return 1
+  "$TMP/antigravity-unpacked/Antigravity IDE/bin/antigravity-ide" --version || return 1
+  mv "$TMP/antigravity-unpacked/Antigravity IDE" "$destination" || return 1
+  ln -sfn "$destination/bin/antigravity-ide" "$HOME/.local/bin/antigravity-ide" || return 1
+  python3 - "$destination" "$HOME/.local/share/applications/antigravity-ide.desktop" <<'PYDESKTOP'
+from pathlib import Path
+import sys
+base = sys.argv[1]
+def quoted(value):
+    return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"'
+Path(sys.argv[2]).write_text(
+    '[Desktop Entry]\nType=Application\nName=Antigravity IDE\n'
+    'Comment=Google Antigravity IDE\n'
+    f'Exec={quoted(base + "/antigravity-ide")} %F\n'
+    f'Icon={base}/resources/app/resources/linux/code.png\n'
+    'Terminal=false\nCategories=Development;IDE;\n')
+PYDESKTOP
+  [ "$?" -eq 0 ] || return 1
+  if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database "$HOME/.local/share/applications" || return 1
+  fi
+  printf 'antigravity-ide %s\n' "$available" >> "$STATE/versions.log"
+  printf 'Antigravity IDE 已安装，可从应用菜单打开并登录，或运行 ~/.local/bin/antigravity-ide。\n'
+)
+
 trae_cn() {
   trae_current=$(installed_package_version trae-cn)
   if [ -z "$trae_current" ]; then
@@ -2622,6 +2711,7 @@ main() {
   optional Chrome chrome
   optional 'Node.js 环境' nvm_node
   optional 'ChatGPT 桌面客户端' chatgpt_desktop
+  optional 'Antigravity IDE' antigravity_ide
   optional 'Rust 开发环境' apt install -y --no-install-recommends cargo rustc build-essential
   optional 'TRAE CN' trae_cn
   optional 'Copyous/Vicinae' launcher_setup
