@@ -148,7 +148,7 @@ PYVERS
 )
 
 download() {
-  curl --fail --silent --show-error --location --connect-timeout 8 --max-time 60 \
+  curl --fail --silent --show-error --location --connect-timeout 8 --max-time "${3:-60}" \
     --retry 2 --retry-delay 2 "$1" --output "$2"
 }
 
@@ -1220,6 +1220,62 @@ localsend() {
   url=$(latest_asset localsend/localsend "$pattern") || return 1
   remote_deb_install LocalSend localsend "$url" "$TMP/localsend.deb"
 }
+
+zed_editor() (
+  say '检查 Zed 稳定版'
+  case "$ARCH" in
+    amd64) zed_arch=x86_64 ;;
+    arm64) zed_arch=aarch64 ;;
+    *) warn 'Zed 仅支持 amd64、arm64。'; return 1 ;;
+  esac
+  download https://api.github.com/repos/zed-industries/zed/releases/latest "$TMP/zed-release.json" || {
+    step_failure 'Zed 版本信息下载失败' '检查代理是否能访问 api.github.com'; return 1;
+  }
+  available=$(python3 - "$TMP/zed-release.json" <<'PYZED'
+import json, re, sys
+release = json.load(open(sys.argv[1]))
+tag = release.get('tag_name', '')
+if release.get('prerelease') or release.get('draft') or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
+    raise SystemExit('Zed 稳定版元数据无效')
+print(tag[1:])
+PYZED
+  ) || return 1
+  current=''
+  if [ -x "$HOME/.local/bin/zed" ]; then
+    current=$(program_version "$HOME/.local/bin/zed" --version)
+    [ -n "$current" ] || { warn '无法读取已有 Zed 版本，保留现有安装。'; return 1; }
+  elif command -v zed >/dev/null 2>&1; then
+    current=$(program_version zed --version)
+    [ -n "$current" ] || { warn '无法读取已有 Zed 版本，保留现有安装。'; return 1; }
+  fi
+  if version_action Zed "$current" "$available"; then :; else
+    rc=$?; [ "$rc" -eq 1 ] && return 0; return 1
+  fi
+  apt install -y --no-install-recommends libvulkan1 libsecret-1-0 xdg-desktop-portal || {
+    step_failure 'Zed 系统依赖安装失败' '检查上方 APT 错误'; return 1;
+  }
+  download https://zed.dev/install.sh "$TMP/zed-install.sh" || {
+    step_failure 'Zed 官方安装器下载失败' '检查代理是否能访问 zed.dev'; return 1;
+  }
+  say "下载 Zed $available 安装包（最长等待 30 分钟）"
+  download "https://cloud.zed.dev/releases/stable/$available/download?asset=zed&arch=$zed_arch&os=linux&source=install.sh" "$TMP/zed.tar.gz" 1800 || {
+    step_failure 'Zed 安装包下载失败（30 分钟时限）' '检查上方 curl 错误，确认代理节点能访问 cloud.zed.dev 及其重定向下载地址'; return 1;
+  }
+  tar -tzf "$TMP/zed.tar.gz" >/dev/null || {
+    step_failure 'Zed 安装包完整性检查失败' '重新运行下载完整安装包'; return 1;
+  }
+  ZED_CHANNEL=stable ZED_VERSION="$available" ZED_BUNDLE_PATH="$TMP/zed.tar.gz" sh "$TMP/zed-install.sh" || {
+    step_failure 'Zed 官方安装器执行失败' '检查上方安装器错误及家目录写入权限、剩余空间'; return 1;
+  }
+  actual=$(program_version "$HOME/.local/bin/zed" --version)
+  [ "$actual" = "$available" ] || {
+    step_failure "Zed 安装后版本验证失败（预期 $available，实际 ${actual:-无法读取}）" '运行 ~/.local/bin/zed --version 查看错误'; return 1;
+  }
+  [ -f "$HOME/.local/share/applications/dev.zed.Zed.desktop" ] || {
+    step_failure 'Zed 应用菜单文件缺失' '检查 ~/.local/share/applications 的写入权限后重跑'; return 1;
+  }
+  printf 'Zed %s 已安装，可从应用菜单或运行 ~/.local/bin/zed 打开。\n' "$actual"
+)
 
 chatgpt_desktop() (
   say '检查 ChatGPT 官方桌面客户端版本'
@@ -2712,6 +2768,7 @@ main() {
   optional 'Node.js 环境' nvm_node
   optional 'ChatGPT 桌面客户端' chatgpt_desktop
   optional 'Antigravity IDE' antigravity_ide
+  optional 'Zed 编辑器' zed_editor
   optional 'Rust 开发环境' apt install -y --no-install-recommends cargo rustc build-essential
   optional 'TRAE CN' trae_cn
   optional 'Copyous/Vicinae' launcher_setup

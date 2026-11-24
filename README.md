@@ -73,6 +73,7 @@ Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失�
 | ChatGPT | 桌面客户端 | 自动检查安装 |
 | [Antigravity IDE](https://antigravity.google/download/) | Google 独立开发环境 | 在 ChatGPT 之后自动检查安装，支持 `amd64`、`arm64` |
 | TRAE CN | 开发工具 | 首次安装先询问 |
+| [Zed](https://zed.dev/docs/installation) | 代码编辑器 | 官方安装器安装稳定版，支持 `amd64`、`arm64`；重跑检查版本，有更新先询问 |
 | LocalSend | 局域网文件传输 | 自动检查安装 |
 | Remmina | 远程桌面，含 RDP 和凭据存储插件 | 自动检查安装 |
 | scrcpy | Android 投屏 | 自动检查安装 |
@@ -86,6 +87,8 @@ Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失�
 | WowType | Fcitx 5 中文输入法，含配置工具及兼容的 GNOME 候选词面板 | 自动安装并设为默认中文输入法；自动切换支持 GNOME/XFCE |
 
 Antigravity IDE 从官方下载页获取当前架构的独立版，安装到 `~/.local/opt/antigravity-ide-<版本>/`，添加应用菜单入口和 `~/.local/bin/antigravity-ide` 命令。首次打开需登录 Google 账号；重跑按 IDE 版本判断是否更新，旧版本目录保留。
+
+Zed 安装到 `~/.local/zed.app/`，添加应用菜单入口和 `~/.local/bin/zed` 命令，安装后检查版本和菜单文件。运行需要支持 Vulkan 1.3 的显卡驱动；可执行 `~/.local/bin/zed --version` 检查版本，再运行 `~/.local/bin/zed` 验证图形界面。
 
 依赖包由对应步骤安装。GNOME 扩展按当前 Shell 版本匹配；不兼容时提示跳过。
 
