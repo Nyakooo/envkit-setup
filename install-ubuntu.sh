@@ -1327,6 +1327,35 @@ PYCHATGPT
   printf 'ChatGPT 桌面客户端已安装，可从应用菜单打开并登录。\n'
 )
 
+# Ubuntu 24.04+ restricts user namespaces for unprofiled desktop apps.
+# Permit Chromium's namespace sandbox for this binary only (no SUID helper).
+antigravity_sandbox() (
+  binary=$1/antigravity-ide
+  [ -x "$binary" ] || return 1
+  [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || :)" = 1 ] || return 0
+  command -v apparmor_parser >/dev/null 2>&1 || {
+    warn '缺少 apparmor_parser，无法配置 Antigravity 桌面沙箱。'; return 1;
+  }
+  profile=$(python3 - "$binary" "$TMP/antigravity-apparmor" <<'PYAPPARMOR'
+import hashlib, sys
+from pathlib import Path
+binary = str(Path(sys.argv[1]).resolve())
+# Quote AppArmor metacharacters even when the user's home contains them.
+escaped = ''.join('\\' + c if c in '\\"*?[]{}^' else c for c in binary)
+if '\n' in binary or '\r' in binary:
+    raise SystemExit('Antigravity 安装路径不能包含换行')
+name = 'ubuntu-init-antigravity-' + hashlib.sha256(binary.encode()).hexdigest()[:16]
+Path(sys.argv[2]).write_text(
+    'abi <abi/4.0>,\ninclude <tunables/global>\n'
+    f'profile {name} "{escaped}" flags=(unconfined) {{\n  userns,\n}}\n')
+print(name)
+PYAPPARMOR
+  ) || return 1
+  sudo apparmor_parser -Q -T "$TMP/antigravity-apparmor" || return 1
+  sudo install -m 0644 "$TMP/antigravity-apparmor" "/etc/apparmor.d/$profile" || return 1
+  sudo apparmor_parser -r "/etc/apparmor.d/$profile" || return 1
+)
+
 antigravity_ide() (
   say '检查 Antigravity IDE 官方独立版版本'
   download https://antigravity.google/download/ "$TMP/antigravity-download.html" || return 1
@@ -1369,6 +1398,10 @@ if binary.is_file():
     print(json.loads(metadata.read_text())['ideVersion'])
 PYCURRENT
   ) || return 1
+  if [ -n "$current" ]; then
+    installed_base=$(dirname "$(dirname "$(readlink -f "$HOME/.local/bin/antigravity-ide")")")
+    antigravity_sandbox "$installed_base" || return 1
+  fi
   if version_action 'Antigravity IDE' "$current" "$available"; then :; else
     rc=$?; [ "$rc" -eq 1 ] && return 0; return 1
   fi
@@ -1394,6 +1427,11 @@ PYUNPACK
   mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications" || return 1
   "$TMP/antigravity-unpacked/Antigravity IDE/bin/antigravity-ide" --version || return 1
   mv "$TMP/antigravity-unpacked/Antigravity IDE" "$destination" || return 1
+  if ! antigravity_sandbox "$destination"; then
+    # Keep a failed first install retryable instead of leaving an occupied target.
+    mv "$destination" "$TMP/antigravity-unpacked/Antigravity IDE" || :
+    return 1
+  fi
   ln -sfn "$destination/bin/antigravity-ide" "$HOME/.local/bin/antigravity-ide" || return 1
   python3 - "$destination" "$HOME/.local/share/applications/antigravity-ide.desktop" <<'PYDESKTOP'
 from pathlib import Path

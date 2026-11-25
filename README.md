@@ -87,7 +87,7 @@ Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失�
 | GNOME System Monitor | 系统资源监视器 | 自动检查安装 |
 | WowType | Fcitx 5 中文输入法，含配置工具及兼容的 GNOME 候选词面板 | 自动安装并设为默认中文输入法；自动切换支持 GNOME/XFCE |
 
-Antigravity IDE 从官方下载页获取当前架构的独立版，安装到 `~/.local/opt/antigravity-ide-<版本>/`，添加应用菜单入口和 `~/.local/bin/antigravity-ide` 命令。首次打开需登录 Google 账号；重跑按 IDE 版本判断是否更新，旧版本目录保留。
+Antigravity IDE 从官方下载页获取当前架构的独立版，安装到 `~/.local/opt/antigravity-ide-<版本>/`，添加应用菜单入口和 `~/.local/bin/antigravity-ide` 命令。首次打开需登录 Google 账号；重跑按 IDE 版本判断是否更新，旧版本目录保留。Ubuntu 启用 AppArmor 用户命名空间限制时，会为该 IDE 的可执行文件安装并加载专用规则，让 Chromium 沙箱正常启动；已是最新版时重跑也会修复规则。此步骤需要 sudo。
 
 Zed 安装到 `~/.local/zed.app/`，添加应用菜单入口和 `~/.local/bin/zed` 命令，安装后检查版本和菜单文件。运行需要支持 Vulkan 1.3 的显卡驱动；可执行 `~/.local/bin/zed --version` 检查版本，再运行 `~/.local/bin/zed` 验证图形界面。
 

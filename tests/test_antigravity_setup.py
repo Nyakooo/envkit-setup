@@ -65,12 +65,14 @@ curl() {
   for argument do destination="$argument"; done
   cp "$FIXTURE/fixture.tar.gz" "$destination"
 }
+antigravity_sandbox() { echo SANDBOX_REPAIR; }
 antigravity_ide || exit 1
 antigravity_ide
 '''
             result = subprocess.run(['sh', '-c', code, 'test', tmp], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.count('LARGE_DOWNLOAD'), 1)
+            self.assertEqual(result.stdout.count('SANDBOX_REPAIR'), 2)
             self.assertIn('本地 2.8.0 已是最新版', result.stdout)
             self.assertTrue((root / 'home/.local/bin/antigravity-ide').is_file())
             desktop = (root / 'home/.local/share/applications/antigravity-ide.desktop').read_text()
@@ -93,9 +95,37 @@ trap - EXIT
 HOME="$1"; TMP="$1"; ARCH=amd64
 download() { cp "$TMP/download.html" "$2"; }
 curl() { echo UNEXPECTED_DOWNLOAD; return 99; }
+antigravity_sandbox() { echo SANDBOX_REPAIR; }
 antigravity_ide
 '''
             result = subprocess.run(['sh', '-c', code, 'test', tmp], input='n\n', capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn('UNEXPECTED_DOWNLOAD', result.stdout)
             self.assertEqual((root / '.local/bin/antigravity-ide').resolve(), app / 'bin/antigravity-ide')
+
+    def test_sandbox_profile_validated_installed_and_loaded(self):
+        with tempfile.TemporaryDirectory(prefix='antigravity sandbox ') as tmp:
+            root = Path(tmp)
+            app = root / 'app'
+            app.mkdir()
+            binary = app / 'antigravity-ide'
+            binary.write_text('#!/bin/sh\nexit 0\n')
+            binary.chmod(0o755)
+            code = FUNCTIONS + '''
+trap - EXIT
+TMP="$1"
+sysctl() { echo 1; }
+apparmor_parser() { :; }
+sudo() { printf '%s\\n' "$*" >> "$TMP/sudo.log"; }
+antigravity_sandbox "$TMP/app"
+'''
+            result = subprocess.run(['sh', '-c', code, 'test', tmp], capture_output=True, text=True)
+            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
+            profile = (root / 'antigravity-apparmor').read_text()
+            self.assertIn(f'"{binary}" flags=(unconfined)', profile)
+            self.assertIn('  userns,', profile)
+            calls = (root / 'sudo.log').read_text().splitlines()
+            self.assertEqual(len(calls), 3)
+            self.assertTrue(calls[0].startswith('apparmor_parser -Q -T '))
+            self.assertTrue(calls[1].startswith('install -m 0644 '))
+            self.assertTrue(calls[2].startswith('apparmor_parser -r /etc/apparmor.d/ubuntu-init-antigravity-'))
