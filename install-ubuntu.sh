@@ -2780,6 +2780,7 @@ main() {
   optional 'WowType 输入法' wowtype_setup
   optional swap swap_setup
   optional 'Remmina/scrcpy/VLC' apt install -y --no-install-recommends remmina remmina-plugin-rdp remmina-plugin-secret scrcpy vlc
+  optional 'mpv 播放器' apt install -y --no-install-recommends mpv
   print_summary || return $?
   enter_configured_zsh
 }

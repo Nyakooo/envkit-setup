@@ -78,6 +78,7 @@ Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失�
 | Remmina | 远程桌面，含 RDP 和凭据存储插件 | 自动检查安装 |
 | scrcpy | Android 投屏 | 自动检查安装 |
 | VLC | 媒体播放 | 自动检查安装 |
+| mpv | 视频与音频播放 | 自动检查安装 |
 | OBS Studio | 录屏与直播，含 `obs-plugins` | 自动安装；GNOME Wayland 补齐录屏 portal |
 | Flameshot | 截图 | 自动安装；GNOME 下配置快捷键 |
 | Vicinae | 启动器，含兼容的 GNOME 扩展 | 自动安装并配置登录自启 |
