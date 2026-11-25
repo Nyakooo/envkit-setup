@@ -1585,7 +1585,7 @@ begin, end = '# BEGIN ubuntu-init shell aliases', '# END ubuntu-init shell alias
 if s.count(begin) != s.count(end):
     raise SystemExit('别名配置块不完整，保留原文件。')
 s = re.sub(re.escape(begin) + r'.*?' + re.escape(end) + r'\n?', '', s, flags=re.S)
-s = s.rstrip() + '\n\n' + begin + "\nalias ra='ranger'\nalias ter='\"$HOME/.local/bin/termihomo\"'\n" + end + '\n'
+s = s.rstrip() + '\n\n' + begin + "\nalias ra='ranger'\nalias ter=\"$HOME/.local/bin/termihomo\"\n" + end + '\n'
 p.with_name(p.name + '.ubuntu-init.tmp').write_text(s)
 PYEXTRAS
   [ "$?" -eq 0 ] || return 1
