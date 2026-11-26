@@ -1246,7 +1246,6 @@ zed_editor() (
 import json, re, sys
 release = json.load(open(sys.argv[1]))
 tag = release.get('tag_name', '')
-tool, label = sys.argv[3:5]
 if release.get('prerelease') or release.get('draft') or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
     raise SystemExit('Zed 稳定版元数据无效')
 print(tag[1:])
