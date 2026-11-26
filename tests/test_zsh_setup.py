@@ -171,7 +171,7 @@ zsh_setup
 grep -q '# Official comments' "$HOME/.zshrc"
 grep -q 'ZSH_THEME="funky"' "$HOME/.zshrc"
 zsh_customize
-zsh -f -c 'source "$HOME/.zshrc"; [[ "$ZSH_THEME" = funky && "${aliases[ra]}" = ranger && "${(j: :)plugins}" = "git zsh-autosuggestions zsh-syntax-highlighting" ]]'
+zsh -f -c 'source "$HOME/.zshrc"; [[ "$ZSH_THEME" = funky && "${aliases[ra]}" = ranger && "${aliases[tick]}" = "$HOME/.local/bin/ticktop" && "${(j: :)plugins}" = "git zsh-autosuggestions zsh-syntax-highlighting" ]]'
 mkdir -p "$HOME/.local/bin"
 printf '#!/bin/sh\necho before-update\n' > "$HOME/.local/bin/termihomo"
 chmod +x "$HOME/.local/bin/termihomo"

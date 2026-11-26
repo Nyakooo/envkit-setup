@@ -25,7 +25,7 @@ sh install-ubuntu.sh
 
 | 步骤 | 执行内容 |
 | --- | --- |
-| 1. 首次运行 | 配置 GitHub hosts 和 APT 镜像，检查系统升级、清理依赖与缓存，安装所选代理工具后结束 |
+| 1. 首次运行 | 配置 GitHub hosts 和 APT 镜像，检查系统升级、清理依赖与缓存，安装所选代理工具和 Ticktop 后结束 |
 | 2. 配置代理 | 打开代理工具，配置内核、订阅和节点，启动本地 HTTP/混合代理 |
 | 3. 再次运行 | 输入代理端口（默认 `7890`），验证通过后继续安装其余软件和配置 |
 | 4. 安装完成 | 查看结果汇总，保存工作后注销并重新登录 |
@@ -52,6 +52,7 @@ FlClash 默认选中，使用规则模式并关闭 TUN；Termihomo 按界面提�
 | 项目 | 具体内容 | 执行方式 |
 | --- | --- | --- |
 | 下载与版本控制 | `curl`、`wget`、`git`、`openssh-client`、`gpg` | 自动检查安装 |
+| [Ticktop](https://github.com/Nyakooo/ticktop) | 终端行情看板，安装到 `~/.local/bin/ticktop` | 代理工具之后默认安装，支持 `amd64`、`arm64` |
 | 终端工具 | `zsh`、`vim`、`htop`、`fzf`、`ranger`、`net-tools`、`tmux` | 自动检查安装 |
 | Zsh 配置 | Oh My Zsh、funky 主题、git 插件、zsh-autosuggestions、zsh-syntax-highlighting | 自动配置，设为默认 Shell |
 | Vim 配置 | 语法高亮、行号、搜索、移动与保存快捷键 | 自动配置 |
@@ -62,6 +63,8 @@ FlClash 默认选中，使用规则模式并关闭 TUN；Termihomo 按界面提�
 | Rust | `cargo`、`rustc`、`build-essential` | 从 Ubuntu 软件源安装 |
 | Docker | Docker CE、CLI、containerd、Compose、Buildx | 自动安装并启用服务；替换冲突包前询问 |
 | Docker 镜像加速 | 毫秒镜像、DaoCloud、DockerProxy、1Panel、轩辕节点 | 匿名测速，选取通过校验的最快至多三个入口 |
+
+Ticktop 从 GitHub Release 下载并校验 SHA-256，重跑时检查版本，有更新先询问。
 
 Git 身份按全局配置逐项检查，已有值不询问、不覆盖。缺失时先补齐身份，再检查 SSH 密钥；邮箱只输入一次。生成密钥后，需自行将公钥添加到 GitHub，私钥保留在本机。
 
@@ -102,7 +105,7 @@ Zed 安装到 `~/.local/zed.app/`，添加应用菜单入口和 `~/.local/bin/ze
 | 启动器 | `Super+空格` 打开 Vicinae |
 | 剪贴板 | `Super+V` 打开 Copyous，隐藏顶部栏图标 |
 | 输入法 | 英文键盘 + WowType，默认 `Ctrl+空格` 切换中英文；保留已有输入法软件包和词库 |
-| Zsh 别名 | `ra` → ranger，`ter` → `~/.local/bin/termihomo` |
+| Zsh 别名 | `ra` → ranger，`ter` → `~/.local/bin/termihomo`，`tick` → `~/.local/bin/ticktop` |
 | 标准目录 | 桌面、下载、文档、图片、音乐、视频、模板、公共目录改为英文名，迁移内容并更新书签；不改变系统语言 |
 | Docker 权限 | 当前用户加入 `docker` 组；其他已打开的终端需注销重登录后生效 |
 

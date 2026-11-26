@@ -723,65 +723,76 @@ termihomo_finish_install() {
   termihomo_command_link
 }
 
-termihomo_install() (
+termihomo_install() {
   printf '%s\n' '如需手动安装 Termihomo，可自行执行：'
   cat <<'TERMIHOMO_MANUAL'
 sh -c 'installer=$(curl -fsSL https\://raw\.githubusercontent.com/Nyakooo/termihomo/master/install.sh) && exec sh -c "$installer"'
 TERMIHOMO_MANUAL
-  say '查询 Termihomo 最新正式版'
-  download https://api.github.com/repos/Nyakooo/termihomo/releases/latest "$TMP/termihomo-release.json" || return 1
-  python3 - "$TMP/termihomo-release.json" "$ARCH" > "$TMP/termihomo-asset" <<'PYASSET'
+  github_tui_install termihomo Termihomo version termihomo_finish_install
+}
+
+ticktop_install() {
+  github_tui_install ticktop Ticktop --version termihomo_configure_path
+}
+
+github_tui_install() (
+  tool=$1; label=$2; version_arg=$3; finish=$4
+  say "查询 $label 最新正式版"
+  download https://api.github.com/repos/Nyakooo/$tool/releases/latest "$TMP/$tool-release.json" || return 1
+  python3 - "$TMP/$tool-release.json" "$ARCH" "$tool" "$label" > "$TMP/$tool-asset" <<'PYASSET'
 import json, re, sys
 release = json.load(open(sys.argv[1]))
 tag = release.get('tag_name', '')
+tool, label = sys.argv[3:5]
 if not re.fullmatch(r'v[0-9]+\.[0-9]+\.[0-9]+', tag):
-    raise SystemExit('Termihomo 正式版版本号无效')
-name = 'termihomo-linux-' + sys.argv[2] + '.tar.gz'
+    raise SystemExit(label + ' 正式版版本号无效')
+arch = {'amd64': 'x86_64', 'arm64': 'aarch64'}[sys.argv[2]]
+name = ('termihomo-linux-' + sys.argv[2] if tool == 'termihomo' else 'ticktop-' + arch + '-unknown-linux-musl') + '.tar.gz'
 asset = next((a for a in release.get('assets', []) if a['name'] == name), None)
 if asset is None:
-    raise SystemExit('Termihomo 缺少当前架构的 Linux 安装包')
+    raise SystemExit(label + ' 缺少当前架构的 Linux 安装包')
 url, digest = asset['browser_download_url'], asset.get('digest') or ''
-expected_url = 'https://github.com/Nyakooo/termihomo/releases/download/' + tag + '/' + name
+expected_url = 'https://github.com/Nyakooo/' + tool + '/releases/download/' + tag + '/' + name
 if url != expected_url or not re.fullmatch(r'sha256:[0-9a-f]{64}', digest):
-    raise SystemExit('Termihomo 发布缺少可信下载地址或 SHA-256')
+    raise SystemExit(label + ' 发布缺少可信下载地址或 SHA-256')
 print(tag[1:])
 print(url)
 print(digest[7:])
 PYASSET
   [ "$?" -eq 0 ] || return 1
-  latest=$(sed -n '1p' "$TMP/termihomo-asset")
-  binary="$HOME/.local/bin/termihomo"
+  latest=$(sed -n '1p' "$TMP/$tool-asset")
+  binary="$HOME/.local/bin/$tool"
   current=''
-  if [ ! -x "$binary" ] && command -v termihomo >/dev/null 2>&1; then binary=$(command -v termihomo); fi
+  if [ ! -x "$binary" ] && command -v "$tool" >/dev/null 2>&1; then binary=$(command -v "$tool"); fi
   if [ -x "$binary" ]; then
-    current=$(program_version "$binary" version)
-    [ -n "$current" ] || { warn '无法读取已有 Termihomo 版本，保留现有安装。'; return 1; }
+    current=$(program_version "$binary" "$version_arg")
+    [ -n "$current" ] || { warn "无法读取已有 $label 版本，保留现有安装。"; return 1; }
   fi
-  if version_action Termihomo "$current" "$latest"; then :; else
-    rc=$?; [ "$rc" -eq 1 ] && { termihomo_finish_install; return $?; }; return 1
+  if version_action "$label" "$current" "$latest"; then :; else
+    rc=$?; [ "$rc" -eq 1 ] && { "$finish"; return $?; }; return 1
   fi
-  url=$(sed -n '2p' "$TMP/termihomo-asset")
-  digest=$(sed -n '3p' "$TMP/termihomo-asset")
-  say '下载并校验 Termihomo 安装包'
-  download "$url" "$TMP/termihomo.tar.gz" || return 1
-  printf '%s  %s\n' "$digest" "$TMP/termihomo.tar.gz" | sha256sum -c - || return 1
-  python3 - "$TMP/termihomo.tar.gz" "$TMP/termihomo" <<'PYEXTRACT'
+  url=$(sed -n '2p' "$TMP/$tool-asset")
+  digest=$(sed -n '3p' "$TMP/$tool-asset")
+  say "下载并校验 $label 安装包"
+  download "$url" "$TMP/$tool.tar.gz" || return 1
+  printf '%s  %s\n' "$digest" "$TMP/$tool.tar.gz" | sha256sum -c - || return 1
+  python3 - "$TMP/$tool.tar.gz" "$TMP/$tool" "$tool" <<'PYEXTRACT'
 import sys, tarfile
 from pathlib import Path
 with tarfile.open(sys.argv[1], 'r:gz') as archive:
-    member = archive.getmember('termihomo')
+    member = archive.getmember(sys.argv[3])
     if not member.isfile() or not 0 < member.size < 128 * 1024 * 1024:
-        raise SystemExit('Termihomo 安装包中的可执行文件无效')
+        raise SystemExit(sys.argv[3] + ' 安装包中的可执行文件无效')
     Path(sys.argv[2]).write_bytes(archive.extractfile(member).read())
 Path(sys.argv[2]).chmod(0o755)
 PYEXTRACT
   [ "$?" -eq 0 ] || return 1
-  actual=$(program_version "$TMP/termihomo" version)
-  [ "$actual" = "$latest" ] || { warn 'Termihomo 安装包版本不匹配。'; return 1; }
+  actual=$(program_version "$TMP/$tool" "$version_arg")
+  [ "$actual" = "$latest" ] || { warn "$label 安装包版本不匹配。"; return 1; }
   mkdir -p "$HOME/.local/bin" || return 1
-  install -m 0755 "$TMP/termihomo" "$HOME/.local/bin/termihomo" || return 1
-  termihomo_finish_install || return 1
-  printf 'Termihomo %s 已安装。\n' "$latest"
+  install -m 0755 "$TMP/$tool" "$HOME/.local/bin/$tool" || return 1
+  "$finish" || return 1
+  printf '%s %s 已安装。\n' "$label" "$latest"
 )
 
 termihomo_setup() {
@@ -1235,6 +1246,7 @@ zed_editor() (
 import json, re, sys
 release = json.load(open(sys.argv[1]))
 tag = release.get('tag_name', '')
+tool, label = sys.argv[3:5]
 if release.get('prerelease') or release.get('draft') or not re.fullmatch(r'v\d+\.\d+\.\d+', tag):
     raise SystemExit('Zed 稳定版元数据无效')
 print(tag[1:])
@@ -1623,7 +1635,7 @@ begin, end = '# BEGIN ubuntu-init shell aliases', '# END ubuntu-init shell alias
 if s.count(begin) != s.count(end):
     raise SystemExit('别名配置块不完整，保留原文件。')
 s = re.sub(re.escape(begin) + r'.*?' + re.escape(end) + r'\n?', '', s, flags=re.S)
-s = s.rstrip() + '\n\n' + begin + "\nalias ra='ranger'\nalias ter=\"$HOME/.local/bin/termihomo\"\n" + end + '\n'
+s = s.rstrip() + '\n\n' + begin + "\nalias ra='ranger'\nalias ter=\"$HOME/.local/bin/termihomo\"\nalias tick=\"$HOME/.local/bin/ticktop\"\n" + end + '\n'
 p.with_name(p.name + '.ubuntu-init.tmp').write_text(s)
 PYEXTRAS
   [ "$?" -eq 0 ] || return 1
@@ -1673,7 +1685,7 @@ zsh_setup() {
     [ "$login_shell" = "$zsh_path" ] || { warn '默认 shell 未成功改变。'; return 1; }
   fi
   refresh_zsh_env || return 1
-  printf '已在安装子进程中 source 验证：%s；ra 和 ter 别名已写入配置，原终端尚未加载。\n' "${ZDOTDIR:-$HOME}/.zshrc"
+  printf '已在安装子进程中 source 验证：%s；ra、ter 和 tick 别名已写入配置，原终端尚未加载。\n' "${ZDOTDIR:-$HOME}/.zshrc"
   printf '%s\n' '第二阶段全部成功结束后，将自动进入 Zsh 并加载这些别名。'
 }
 
@@ -2758,7 +2770,7 @@ enter_configured_zsh() {
   [ -t 0 ] && [ -t 1 ] || return 0
   command -v zsh >/dev/null 2>&1 || return 1
   [ -r "${ZDOTDIR:-$HOME}/.zshrc" ] || return 1
-  printf '\n安装结束，自动进入已加载配置的 Zsh，可直接使用 ra 和 ter。\n'
+  printf '\n安装结束，自动进入已加载配置的 Zsh，可直接使用 ra、ter 和 tick。\n'
   cleanup
   TMP=""
   if [ "${DOCKER_GROUP_REFRESH:-no}" = yes ]; then
@@ -2782,6 +2794,7 @@ main() {
     run_step 'APT 更新升级与清理' apt_maintenance || die 'APT 更新、升级或清理失败，已停止；处理上面的错误后重新运行。'
     say '第一阶段：选择并安装代理工具'
     run_step '代理工具安装' proxy_setup || die '代理工具尚未安装完成；重新运行将重试第一阶段。'
+    optional Ticktop ticktop_install
     say '第一阶段已完成，本次到此结束。'
     printf '请先配置所选代理工具的内核、订阅和节点并启动代理，再次执行同一个脚本继续第二阶段。\n'
     print_summary
@@ -2791,6 +2804,7 @@ main() {
   # The saved tool records first-stage installation, not the currently running proxy.
   say '第二阶段：验证当前本地代理并配置环境'
   run_step '本地代理验证' configure_proxy || die '代理尚不可用；请先启动并配置代理，再重新运行。'
+  optional Ticktop ticktop_install
   run_step 'APT 索引' apt_update || die '通过代理刷新 APT 索引失败，请处理后重新运行。'
   say '准备 zsh，保留用户配置，已有旧脚本配置迁移到官方模板'
   run_step 'zsh 软件包' apt install -y --no-install-recommends zsh || die 'zsh 安装失败，无法继续配置环境。'

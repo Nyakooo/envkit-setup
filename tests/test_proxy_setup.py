@@ -86,6 +86,40 @@ download() {
             (root / 'release.json').write_text(json.dumps(manifest))
             self.shell(stub + 'if termihomo_install; then exit 99; fi\n"$HOME/.local/bin/termihomo" version | grep v1.0.0', 'y\n', root)
 
+    def test_ticktop_install_skip_decline_and_checksum_failure(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            archive = root / 'release.tar.gz'
+            content = b'#!/bin/sh\nprintf "Ticktop v1.2.3 linux/amd64\\n"\n'
+            with tarfile.open(archive, 'w:gz') as tar:
+                member = tarfile.TarInfo('ticktop')
+                member.size = len(content)
+                tar.addfile(member, io.BytesIO(content))
+            manifest = {'tag_name': 'v1.2.3', 'assets': [{
+                'name': 'ticktop-x86_64-unknown-linux-musl.tar.gz',
+                'browser_download_url': 'https://github.com/Nyakooo/ticktop/releases/download/v1.2.3/ticktop-x86_64-unknown-linux-musl.tar.gz',
+                'digest': 'sha256:' + hashlib.sha256(archive.read_bytes()).hexdigest()}]}
+            (root / 'release.json').write_text(json.dumps(manifest))
+            stub = '''
+mkdir -p "$HOME"
+PATH=/usr/bin:/bin
+download() {
+ case "$1" in
+  *releases/latest) cp "$TMP/release.json" "$2" ;;
+  *.tar.gz) echo archive >> "$TMP/downloads"; cp "$TMP/release.tar.gz" "$2" ;;
+  *) return 99 ;;
+ esac
+}
+'''
+            output = self.shell(stub + 'ticktop_install\nticktop_install\n[ "$(wc -l < "$TMP/downloads")" = 1 ]', root=root)
+            self.shell('PATH=/usr/bin:/bin; . "$HOME/.bashrc"; ticktop --version', root=root)
+            binary = root / 'home/.local/bin/ticktop'
+            binary.write_text('#!/bin/sh\necho "Ticktop v1.0.0 linux/amd64"\n')
+            self.shell(stub + 'ticktop_install\n[ "$(wc -l < "$TMP/downloads")" = 1 ]', 'n\n', root)
+            manifest['assets'][0]['digest'] = 'sha256:' + '0' * 64
+            (root / 'release.json').write_text(json.dumps(manifest))
+            self.shell(stub + 'if ticktop_install; then exit 99; fi\n"$HOME/.local/bin/ticktop" version | grep v1.0.0', 'y\n', root)
+
     def test_two_runs_stop_then_continue_and_proxy_failure_blocks(self):
         self.shell('''
 mkdir -p "$HOME"
@@ -100,17 +134,17 @@ configure_proxy() { echo verify >> "$TMP/order"; }
 zsh_configure() { :; }
 cleanup_legacy_proxy_env() { :; }
 optional() {
- if [ "$2" = user_dirs_setup ]; then echo dirs >> "$TMP/user-dirs-calls"; else echo software >> "$TMP/order"; fi
+ if [ "$2" = user_dirs_setup ]; then echo dirs >> "$TMP/user-dirs-calls"; elif [ "$2" = ticktop_install ]; then echo ticktop >> "$TMP/order"; else echo software >> "$TMP/order"; fi
 }
 chsh() { :; }
 main
-[ "$(cat "$TMP/order")" = "$(printf 'hosts\\nmirror\\napt\\nupgrade -y\\nautoremove -y\\nautoclean\\nflclash')" ]
+[ "$(cat "$TMP/order")" = "$(printf 'hosts\\nmirror\\napt\\nupgrade -y\\nautoremove -y\\nautoclean\\nflclash\\nticktop')" ]
 [ "$(cat "$STATE/proxy-tool")" = FlClash ]
 : > "$TMP/order"
 printf 'Termihomo\\n' > "$STATE/proxy-tool"
 configure_proxy() { [ "$#" -eq 0 ]; echo verify >> "$TMP/order"; }
 main
-[ "$(head -n 2 "$TMP/order")" = "$(printf 'verify\\napt')" ]
+[ "$(head -n 3 "$TMP/order")" = "$(printf 'verify\\nticktop\\napt')" ]
 grep -q software "$TMP/order"
 ! grep -q hosts "$TMP/order"
 : > "$TMP/order"
