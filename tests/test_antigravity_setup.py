@@ -59,8 +59,15 @@ trap - EXIT
 HOME="$1/home"; TMP="$1/work"; STATE="$1/state"; ARCH=amd64
 FIXTURE="$1"
 PATH="$1/mock-bin:$PATH"
-download() { cp "$FIXTURE/download.html" "$2"; }
 curl() {
+  case " $* " in
+    *" https://antigravity.google/download/ "*)
+      case " $* " in *" --compressed "*) ;; *) return 99 ;; esac
+      for argument do destination="$argument"; done
+      cp "$FIXTURE/download.html" "$destination"
+      return
+      ;;
+  esac
   echo LARGE_DOWNLOAD
   for argument do destination="$argument"; done
   cp "$FIXTURE/fixture.tar.gz" "$destination"
@@ -69,7 +76,9 @@ antigravity_sandbox() { echo SANDBOX_REPAIR; }
 antigravity_ide || exit 1
 antigravity_ide
 '''
-            result = subprocess.run(['sh', '-c', code, 'test', tmp], capture_output=True, text=True)
+            script = Path(tmp) / 'test.sh'
+            script.write_text(code)
+            result = subprocess.run(['sh', str(script), tmp], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertEqual(result.stdout.count('LARGE_DOWNLOAD'), 1)
             self.assertEqual(result.stdout.count('SANDBOX_REPAIR'), 2)
@@ -98,7 +107,9 @@ curl() { echo UNEXPECTED_DOWNLOAD; return 99; }
 antigravity_sandbox() { echo SANDBOX_REPAIR; }
 antigravity_ide
 '''
-            result = subprocess.run(['sh', '-c', code, 'test', tmp], input='n\n', capture_output=True, text=True)
+            script = Path(tmp) / 'test.sh'
+            script.write_text(code)
+            result = subprocess.run(['sh', str(script), tmp], input='n\n', capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             self.assertNotIn('UNEXPECTED_DOWNLOAD', result.stdout)
             self.assertEqual((root / '.local/bin/antigravity-ide').resolve(), app / 'bin/antigravity-ide')
@@ -119,7 +130,9 @@ apparmor_parser() { :; }
 sudo() { printf '%s\\n' "$*" >> "$TMP/sudo.log"; }
 antigravity_sandbox "$TMP/app"
 '''
-            result = subprocess.run(['sh', '-c', code, 'test', tmp], capture_output=True, text=True)
+            script = Path(tmp) / 'test.sh'
+            script.write_text(code)
+            result = subprocess.run(['sh', str(script), tmp], capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
             profile = (root / 'antigravity-apparmor').read_text()
             self.assertIn(f'"{binary}" flags=(unconfined)', profile)

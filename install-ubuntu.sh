@@ -149,7 +149,7 @@ PYVERS
 
 download() {
   curl --fail --silent --show-error --location --connect-timeout 8 --max-time "${3:-60}" \
-    --retry 2 --retry-delay 2 "$1" --output "$2"
+    --retry 2 --retry-delay 2 ${4:+"$4"} "$1" --output "$2"
 }
 
 git_clone() {
@@ -1369,7 +1369,7 @@ PYAPPARMOR
 
 antigravity_ide() (
   say '检查 Antigravity IDE 官方独立版版本'
-  download https://antigravity.google/download/ "$TMP/antigravity-download.html" || return 1
+  download https://antigravity.google/download/ "$TMP/antigravity-download.html" 60 --compressed || return 1
   python3 - "$TMP/antigravity-download.html" "$ARCH" > "$TMP/antigravity-asset" <<'PYANTIGRAVITY'
 # ubuntu-init Antigravity selection: standalone IDE, not the App or CLI.
 from html.parser import HTMLParser
