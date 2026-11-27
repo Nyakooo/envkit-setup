@@ -1341,7 +1341,7 @@ PYCHATGPT
 # Ubuntu 24.04+ restricts user namespaces for unprofiled desktop apps.
 # Permit Chromium's namespace sandbox for this binary only (no SUID helper).
 antigravity_sandbox() (
-  binary=$1/antigravity-ide
+  binary=$1/antigravity
   [ -x "$binary" ] || return 1
   [ "$(sysctl -n kernel.apparmor_restrict_unprivileged_userns 2>/dev/null || :)" = 1 ] || return 0
   command -v apparmor_parser >/dev/null 2>&1 || {
@@ -1367,102 +1367,97 @@ PYAPPARMOR
   sudo apparmor_parser -r "/etc/apparmor.d/$profile" || return 1
 )
 
-antigravity_ide() (
-  say '检查 Antigravity IDE 官方独立版版本'
-  download https://antigravity.google/download/ "$TMP/antigravity-download.html" 60 --compressed || return 1
-  python3 - "$TMP/antigravity-download.html" "$ARCH" > "$TMP/antigravity-asset" <<'PYANTIGRAVITY'
-# ubuntu-init Antigravity selection: standalone IDE, not the App or CLI.
-from html.parser import HTMLParser
+antigravity_app_desktop() (
+  python3 - "$1" "$2" "$HOME/.local/share/applications/antigravity-app.desktop" <<'PYAPPDESKTOP'
+from pathlib import Path
+import json, struct, sys
+
+launcher, directory, desktop = sys.argv[1:]
+directory = Path(directory)
+icon = directory / 'icon.png'
+if not icon.is_file():
+    with (directory / 'resources/app.asar').open('rb') as archive:
+        _, header_size, _, metadata_size = struct.unpack('<4I', archive.read(16))
+        entry = json.loads(archive.read(metadata_size))['files']['icon.png']
+        archive.seek(8 + header_size + int(entry['offset']))
+        data = archive.read(entry['size'])
+    if len(data) != entry['size'] or not data.startswith(b'\x89PNG\r\n\x1a\n'):
+        raise SystemExit('Antigravity App 图标无效')
+    icon.write_bytes(data)
+escaped = ''.join('\\' + c if c in '\\"`$' else c for c in launcher).replace('%', '%%')
+Path(desktop).write_text(
+    '[Desktop Entry]\nType=Application\nName=Antigravity App\n'
+    f'Exec="{escaped}" %F\nIcon={icon}\nTerminal=false\nCategories=Development;\n'
+)
+PYAPPDESKTOP
+  [ "$?" -eq 0 ] || return 1
+)
+
+antigravity_app() (
+  say '检查 Antigravity App 官方 Linux 版本'
+  download https://antigravity.google/download/ "$TMP/antigravity-app-download.html" 60 --compressed || return 1
+  asset=$(python3 - "$TMP/antigravity-app-download.html" "$ARCH" <<'PYAPP'
 from pathlib import Path
 import re, sys
-from urllib.parse import unquote, urlsplit
+
 arch = {'amd64': 'x64', 'arm64': 'arm'}[sys.argv[2]]
-class Downloads(HTMLParser):
-    def handle_starttag(self, tag, attrs):
-        if tag != 'a':
-            return
-        url = dict(attrs).get('href', '')
-        parts = urlsplit(url)
-        match = re.fullmatch(
-            r'/edgedl/release2/[a-zA-Z0-9_-]+/antigravity/stable/'
-            r'(\d+\.\d+\.\d+)-[0-9]+/linux-' + arch + r'/Antigravity IDE\.tar\.gz',
-            unquote(parts.path))
-        if parts.scheme == 'https' and parts.netloc == 'edgedl.me.gvt1.com' and match and not parts.query and not parts.fragment:
-            found.add((match[1], url))
-found = set()
-Downloads().feed(Path(sys.argv[1]).read_text())
-if len(found) != 1:
-    raise SystemExit('无法确定当前架构的 Antigravity IDE 官方下载地址')
-version, url = found.pop()
-print(version)
-print(url)
-PYANTIGRAVITY
-  [ "$?" -eq 0 ] || return 1
-  available=$(sed -n '1p' "$TMP/antigravity-asset")
-  url=$(sed -n '2p' "$TMP/antigravity-asset")
-  current=$(python3 - "$HOME/.local/bin/antigravity-ide" <<'PYCURRENT'
-import json, sys
-from pathlib import Path
-binary = Path(sys.argv[1])
-if binary.is_file():
-    metadata = binary.resolve().parent.parent / 'resources/app/product.json'
-    print(json.loads(metadata.read_text())['ideVersion'])
-PYCURRENT
+page = Path(sys.argv[1]).read_text()
+assets = list(re.finditer(
+    r'(?<=")https://storage\.googleapis\.com/antigravity-public/antigravity-hub/'
+    r'(\d+\.\d+\.\d+)-(\d+)/linux-' + arch + r'/Antigravity\.tar\.gz(?=")',
+    page,
+))
+if not assets:
+    raise SystemExit('无法确定当前架构的 Antigravity App 官方下载地址')
+latest = max(assets, key=lambda match: (tuple(map(int, match[1].split('.'))), int(match[2])))
+print(latest[0])
+PYAPP
   ) || return 1
-  if [ -n "$current" ]; then
-    installed_base=$(dirname "$(dirname "$(readlink -f "$HOME/.local/bin/antigravity-ide")")")
-    antigravity_sandbox "$installed_base" || return 1
+  release=${asset#*/antigravity-hub/}
+  available=${release%%-*}
+  launcher="$HOME/.local/bin/antigravity"
+  current=
+  if [ -e "$launcher" ]; then
+    installed_base=$(dirname "$(readlink -f "$launcher")")
+    [ -r "$installed_base/.envkit-version" ] || {
+      warn 'Antigravity App 启动命令已存在，无法识别其版本。'; return 1;
+    }
+    current=$(cat "$installed_base/.envkit-version") || return 1
+  else
+    confirm_update "尚未安装 Antigravity App，是否安装 $available？" y || {
+      record_step_event skip; return 0;
+    }
   fi
-  if version_action 'Antigravity IDE' "$current" "$available"; then :; else
-    rc=$?; [ "$rc" -eq 1 ] && return 0; return 1
+  if version_action 'Antigravity App' "$current" "$available"; then :; else
+    [ "$?" -eq 1 ] || return 1
+    antigravity_app_desktop "$launcher" "$installed_base" || warn '无法修复 Antigravity App 图标。'
+    return 0
   fi
-  say '下载 Antigravity IDE（单次最多 600 秒）'
   curl --fail --show-error --location --connect-timeout 8 --max-time 600 --retry 2 \
-    "$url" --output "$TMP/antigravity-ide.tar.gz" || return 1
-  python3 - "$TMP/antigravity-ide.tar.gz" "$TMP/antigravity-unpacked" "$available" <<'PYUNPACK'
-import json, sys, tarfile
-from pathlib import Path
-root = Path(sys.argv[2])
+    "$asset" --output "$TMP/antigravity-app.tar.gz" || return 1
+  python3 - "$TMP/antigravity-app.tar.gz" "$TMP/antigravity-app" <<'PYAPPUNPACK'
+import sys, tarfile
 with tarfile.open(sys.argv[1]) as archive:
-    archive.extractall(root, filter='data')
-app = root / 'Antigravity IDE'
-if json.loads((app / 'resources/app/product.json').read_text())['ideVersion'] != sys.argv[3]:
-    raise SystemExit('Antigravity IDE 归档版本不匹配')
-for name in ('antigravity-ide', 'bin/antigravity-ide', 'resources/app/resources/linux/code.png'):
-    if not (app / name).is_file():
-        raise SystemExit('Antigravity IDE 归档缺少必要文件')
-PYUNPACK
+    archive.extractall(sys.argv[2], filter='data')
+PYAPPUNPACK
   [ "$?" -eq 0 ] || return 1
-  destination="$HOME/.local/opt/antigravity-ide-$available"
-  [ ! -e "$destination" ] || { warn "目标目录已存在，保留现有文件：$destination"; return 1; }
+  set -- "$TMP/antigravity-app"/Antigravity-*
+  [ "$#" -eq 1 ] && [ -x "$1/antigravity" ] || return 1
+  destination="$HOME/.local/opt/antigravity-app-$available"
+  [ ! -e "$destination" ] || { warn "目标目录已存在：$destination"; return 1; }
   mkdir -p "$HOME/.local/opt" "$HOME/.local/bin" "$HOME/.local/share/applications" || return 1
-  "$TMP/antigravity-unpacked/Antigravity IDE/bin/antigravity-ide" --version || return 1
-  mv "$TMP/antigravity-unpacked/Antigravity IDE" "$destination" || return 1
+  printf '%s\n' "$available" > "$1/.envkit-version" || return 1
+  mv "$1" "$destination" || return 1
   if ! antigravity_sandbox "$destination"; then
-    # Keep a failed first install retryable instead of leaving an occupied target.
-    mv "$destination" "$TMP/antigravity-unpacked/Antigravity IDE" || :
+    mv "$destination" "$1" || :
     return 1
   fi
-  ln -sfn "$destination/bin/antigravity-ide" "$HOME/.local/bin/antigravity-ide" || return 1
-  python3 - "$destination" "$HOME/.local/share/applications/antigravity-ide.desktop" <<'PYDESKTOP'
-from pathlib import Path
-import sys
-base = sys.argv[1]
-def quoted(value):
-    return '"' + value.replace('\\', '\\\\').replace('"', '\\"').replace('`', '\\`').replace('$', '\\$').replace('%', '%%') + '"'
-Path(sys.argv[2]).write_text(
-    '[Desktop Entry]\nType=Application\nName=Antigravity IDE\n'
-    'Comment=Google Antigravity IDE\n'
-    f'Exec={quoted(base + "/antigravity-ide")} %F\n'
-    f'Icon={base}/resources/app/resources/linux/code.png\n'
-    'Terminal=false\nCategories=Development;IDE;\n')
-PYDESKTOP
-  [ "$?" -eq 0 ] || return 1
-  if command -v update-desktop-database >/dev/null 2>&1; then
-    update-desktop-database "$HOME/.local/share/applications" || return 1
+  if ! antigravity_app_desktop "$launcher" "$destination"; then
+    mv "$destination" "$1" || :
+    return 1
   fi
-  printf 'antigravity-ide %s\n' "$available" >> "$STATE/versions.log"
-  printf 'Antigravity IDE 已安装，可从应用菜单打开并登录，或运行 ~/.local/bin/antigravity-ide。\n'
+  ln -sfn "$destination/antigravity" "$launcher" || return 1
+  printf 'antigravity-app %s\n' "$available" >> "$STATE/versions.log"
 )
 
 trae_cn() {
@@ -2818,7 +2813,7 @@ main() {
   optional Chrome chrome
   optional 'Node.js 环境' nvm_node
   optional 'ChatGPT 桌面客户端' chatgpt_desktop
-  optional 'Antigravity IDE' antigravity_ide
+  optional 'Antigravity App' antigravity_app
   optional 'Zed 编辑器' zed_editor
   optional 'Rust 开发环境' apt install -y --no-install-recommends cargo rustc build-essential
   optional 'TRAE CN' trae_cn
